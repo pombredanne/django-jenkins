@@ -2,6 +2,15 @@
 import os.path
 import subprocess
 
+class CalledProcessError(subprocess.CalledProcessError):
+    def __init__(self, returncode, cmd, output=None):
+        self.output = output
+        super(CalledProcessError, self).__init__(returncode, cmd)
+
+    def __str__(self):
+        return "Command '%s' returned non-zero exit status %d\nOutput:\n%s" % (self.cmd, self.returncode, self.output)
+
+
 def relpath(path, start=os.path.curdir):
     """
     Return a relative version of a path
@@ -30,14 +39,12 @@ def check_output(*popenargs, **kwargs):
     if 'stdout' in kwargs:
         raise ValueError('stdout argument not allowed, it will be overridden.')
     process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
-    output, unused_err = process.communicate()
+    output, err = process.communicate()
     retcode = process.poll()
     if retcode:
         cmd = kwargs.get("args")
         if cmd is None:
             cmd = popenargs[0]
 
-        exception = subprocess.CalledProcessError(retcode, cmd)
-        exception.output = output
-        raise exception
+        raise CalledProcessError(retcode, cmd, output=output + '\n' + err)
     return output

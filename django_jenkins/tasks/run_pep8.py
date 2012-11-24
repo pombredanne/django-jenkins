@@ -10,7 +10,7 @@ from django_jenkins.tasks import BaseTask, get_apps_locations
 
 class Task(BaseTask):
     option_list = [make_option("--pep8-exclude",
-                               dest="pep8-exclude", default=pep8.DEFAULT_EXCLUDE,
+                               dest="pep8-exclude", default=pep8.DEFAULT_EXCLUDE + ",migrations",
                                help="exclude files or directories which match these "
                                "comma separated patterns (default: %s)" %
                                pep8.DEFAULT_EXCLUDE),
@@ -46,9 +46,8 @@ class Task(BaseTask):
             code = text[:4]
             if pep8.ignore_code(code):
                 return
-            message = re.sub(r'([WE]\d+)', r'[\1] PEP8:', text)
             sourceline = instance.line_offset + line_number
-            self.output.write('%s:%s: %s\n' % (instance.filename, sourceline, message))
+            self.output.write('%s:%s:%s: %s\n' % (instance.filename, sourceline, offset+1, text))
         pep8.Checker.report_error = report_error
 
         for location in locations:

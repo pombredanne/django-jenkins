@@ -10,8 +10,13 @@ from cStringIO import StringIO
 from unittest import _TextTestResult, TestResult
 from xml.dom.minidom import Document
 from django.conf import settings
-from django.test.simple import DjangoTestSuiteRunner, DjangoTestRunner
+from django.test import TestCase
+from django.test.simple import DjangoTestSuiteRunner, reorder_suite
 from django_jenkins import signals
+try:
+    from django.test.simple import TextTestRunner as TestRunner
+except ImportError:
+    from django.test.simple import DjangoTestRunner as TestRunner
 
 
 class _TestInfo(object):
@@ -107,16 +112,19 @@ class _XMLTestResult(_TextTestResult):
 
     def addSuccess(self, test):
         "Called when a test executes successfully."
+        signals.test_add_success.send(sender=self, test=test)
         self._prepare_callback(_TestInfo(self, test), \
             self.successes, 'OK', '.')
 
     def addFailure(self, test, err):
         "Called when a test method fails."
+        signals.test_add_failure.send(sender=self, test=test, err=err)
         self._prepare_callback(_TestInfo(self, test, _TestInfo.FAILURE, err), \
             self.failures, 'FAIL', 'F')
 
     def addError(self, test, err):
         "Called when a test method raises an error."
+        signals.test_add_error.send(sender=self, test=test, err=err)
         self._prepare_callback(_TestInfo(self, test, _TestInfo.ERROR, err), \
             self.errors, 'ERROR', 'E')
 
@@ -263,12 +271,13 @@ class _XMLTestResult(_TextTestResult):
                 report_file.close()
 
 
-class XMLTestRunner(DjangoTestRunner):
+class XMLTestRunner(TestRunner):
     """
     A test result class that can express test results in a XML report.
     """
-    def __init__(self, output_dir, debug=False, **kwargs):
+    def __init__(self, output_dir, debug=False, with_reports=True, **kwargs):
         super(XMLTestRunner, self).__init__(**kwargs)
+        self.with_reports = with_reports
         self.debug = debug
         self.output_dir = output_dir
 
@@ -293,7 +302,8 @@ class XMLTestRunner(DjangoTestRunner):
         try:
             self._patch_standard_output()
             result = super(XMLTestRunner, self).run(test)
-            result.generate_reports(self)
+            if self.with_reports:
+                result.generate_reports(self)
         finally:
             self._restore_standard_output()
         return result
@@ -303,8 +313,9 @@ class CITestSuiteRunner(DjangoTestSuiteRunner):
     """
     Continues integration test runner
     """
-    def __init__(self, output_dir, debug=False, **kwargs):
+    def __init__(self, output_dir, debug=False, with_reports=True, **kwargs):
         super(CITestSuiteRunner, self).__init__(**kwargs)
+        self.with_reports = with_reports
         self.debug = debug
         self.output_dir = output_dir
 
@@ -325,7 +336,7 @@ class CITestSuiteRunner(DjangoTestSuiteRunner):
     def build_suite(self, test_labels, **kwargs):
         suite = unittest.TestSuite()
         signals.build_suite.send(sender=self, suite=suite)
-        return suite
+        return reorder_suite(suite, (TestCase,))
 
     def run_tests(self, test_labels, extra_tests=None, **kwargs):
         self.setup_test_environment()
@@ -338,13 +349,15 @@ class CITestSuiteRunner(DjangoTestSuiteRunner):
             return self.suite_result(suite, result)
         else:
             self.teardown_test_environment()
-            return True
+            return 0
 
     def run_suite(self, suite, **kwargs):
         signals.before_suite_run.send(sender=self)
-        result = XMLTestRunner(verbosity=self.verbosity,
-                               output_dir=self.output_dir,
-                               debug=self.debug).run(suite)
+        result = XMLTestRunner(
+            verbosity=self.verbosity,
+            output_dir=self.output_dir,
+            debug=self.debug,
+            with_reports=self.with_reports).run(suite)
         signals.after_suite_run.send(sender=self)
 
         return result
