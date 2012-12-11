@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import re
 import os
 import sys
 import pep8
@@ -17,7 +16,11 @@ class Task(BaseTask):
                    make_option("--pep8-select", dest="pep8-select",
                                help="select errors and warnings (e.g. E,W6)"),
                    make_option("--pep8-ignore", dest="pep8-ignore",
-                               help="skip errors and warnings (e.g. E4,W)")]
+                               help="skip errors and warnings (e.g. E4,W)"),
+                   make_option("--pep8-max-line-length", dest="pep8-max-line-length", type='int',
+                               help="set maximum allowed line length (default: %d)" % pep8.MAX_LINE_LENGTH),
+
+]
 
     def __init__(self, test_labels, options):
         super(Task, self).__init__(test_labels, options)
@@ -31,26 +34,29 @@ class Task(BaseTask):
         else:
             self.output = sys.stdout
 
-        self.pep8_options = ['--exclude=%s' % options['pep8-exclude']]
+        self.pep8_options = { 'exclude': options['pep8-exclude'].split(',') }
         if options['pep8-select']:
-            self.pep8_options.append('--select=%s' % options['pep8-select'])
+            self.pep8_options['select'] = options['pep8-select'].split(',')
         if options['pep8-ignore']:
-            self.pep8_options.append('--ignore=%s' % options['pep8-ignore'])
+            self.pep8_options['ignore'] = options['pep8-ignore'].split(',')
+        if options['pep8-max-line-length']:
+            self.pep8_options['max_line_length'] = options['pep8-max-line-length']
 
     def teardown_test_environment(self, **kwargs):
         locations = get_apps_locations(self.test_labels, self.test_all)
-        pep8.process_options(self.pep8_options + locations)
 
-        # run pep8 tool with captured output
-        def report_error(instance, line_number, offset, text, check):
-            code = text[:4]
-            if pep8.ignore_code(code):
-                return
-            sourceline = instance.line_offset + line_number
-            self.output.write('%s:%s:%s: %s\n' % (instance.filename, sourceline, offset+1, text))
-        pep8.Checker.report_error = report_error
+        class JenkinsReport(pep8.BaseReport):
+            def error(instance, line_number, offset, text, check):
+                code = super(JenkinsReport, instance).error(line_number, offset, text, check)
+
+                if not code:
+                    return
+                sourceline = instance.line_offset + line_number
+                self.output.write('%s:%s:%s: %s\n' % (instance.filename, sourceline, offset+1, text))
+    
+        pep8style = pep8.StyleGuide(parse_argv=False, config_file=False, reporter=JenkinsReport, **self.pep8_options)
 
         for location in locations:
-            pep8.input_dir(relpath(location), runner=pep8.input_file)
-
+            pep8style.input_dir(relpath(location))
+        
         self.output.close()

@@ -2,9 +2,10 @@
 import os
 import subprocess
 import sys
+import fnmatch
 from optparse import make_option
 from django.conf import settings
-from django_jenkins.functions import relpath, CalledProcessError
+from django_jenkins.functions import CalledProcessError, find_first_existing_executable
 from django_jenkins.tasks import BaseTask, get_apps_locations
 
 
@@ -35,13 +36,24 @@ class Task(BaseTask):
         self.csslint_with_minjs = options.get('csslint_with_mincss', False)
         root_dir = os.path.normpath(os.path.dirname(__file__))
 
-        self.intepreter = options['csslint_interpreter'] or \
-                          getattr(settings, 'CSSLINT_INTERPRETER', 'rhino')
+        self.interpreter = options['csslint_interpreter'] or \
+                          getattr(settings, 'CSSLINT_INTERPRETER', None)
+        if not self.interpreter:
+            self.interpreter = find_first_existing_executable(
+                [('node', '--help'), ('rhino', '--help')])
+            if not self.interpreter:
+                raise ValueError('No sutable js interpreter found. Please install nodejs or rhino')
 
         self.implementation = options['csslint_implementation']
         if not self.implementation:
-            self.implementation = os.path.join(root_dir, 'csslint', 'release', 'csslint-rhino.js')
-
+            runner = os.path.basename(self.interpreter)
+            if 'rhino' in runner:
+                self.implementation = os.path.join(root_dir, 'csslint', 'release', 'csslint-rhino.js')
+            elif 'node' in runner:
+                self.implementation = os.path.join(root_dir, 'csslint', 'release', 'npm', 'cli.js')
+            else:
+                raise ValueError('No sutable css lint runner found for %s' % self.interpreter)
+                
         if self.to_file:
             output_dir = options['output_dir']
             if not os.path.exists(output_dir):
@@ -50,17 +62,17 @@ class Task(BaseTask):
         else:
             self.output = sys.stdout
 
-        self.exclude = options['csslint_exclude']
+        self.exclude = options['csslint_exclude'].split(',')
 
     def teardown_test_environment(self, **kwargs):
-        files = [relpath(path) for path in self.static_files_iterator()]
+        files = [path for path in self.static_files_iterator()]
         if self.to_file:
             fmt = 'lint-xml'
         else:
             fmt = 'text'
-
+            
         if files:
-            cmd = [self.intepreter, self.implementation, '--format=%s' % fmt] + files
+            cmd = [self.interpreter, self.implementation, '--format=%s' % fmt] + files
 
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
             output, err = process.communicate()
@@ -68,9 +80,9 @@ class Task(BaseTask):
             if retcode not in [0, 1]: # normal csslint return codes
                 raise CalledProcessError(retcode, cmd, output=output + '\n' + err)
 
-            self.output.write(output)
+            self.output.write(output.decode('utf-8'))
         elif self.to_file:
-            self.output.write('<csslint></csslint')
+            self.output.write('<?xml version="1.0" encoding="utf-8"?><lint></lint>')
 
     def static_files_iterator(self):
         locations = get_apps_locations(self.test_labels, self.test_all)
@@ -86,6 +98,12 @@ class Task(BaseTask):
                 for location in list(settings.STATICFILES_DIRS):
                     if path.startswith(location):
                         return True
+            return False
+            
+        def is_excluded(path):
+            for pattern in self.exclude:
+                if fnmatch.fnmatchcase(path, pattern):
+                    return True
             return False
 
         if hasattr(settings, 'CSSLINT_CHECKED_FILES'):
@@ -106,6 +124,7 @@ class Task(BaseTask):
             for location in locations:
                 for dirpath, dirnames, filenames in os.walk(os.path.join(location, 'static')):
                     for filename in filenames:
-                        if filename.endswith('.css') and in_tested_locations(os.path.join(dirpath, filename)):
-                            yield os.path.join(dirpath, filename)
+                        path = os.path.join(dirpath, filename)
+                        if filename.endswith('.css') and in_tested_locations(path) and not is_excluded(path):
+                            yield path
 

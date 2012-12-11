@@ -1,33 +1,44 @@
-/* JSLint Rhino Runner */
+/* JSHint Rhino Runner */
 
 /*global
      load: true
-     JSLINT: true
+     JSHINT: true
      readFile: true
      print: true
+     process: true
+     require: true
+     global: true
  */
 
-var jslint = arguments[0];
-var filename = arguments[1];
-var format = arguments[2];
+if (typeof process !== 'undefined') {
+    var fs = require('fs');
 
-load(jslint);
+    var jshint =  process.argv[2];
+    var filename = process.argv[3];
+    var format = process.argv[4];
+    var config = eval('(' + process.argv[5] + ')');
+    var fileContent = fs.readFileSync(filename, 'utf8');
 
-JSLINT(readFile(filename), {
-    white: true,
-    onevar: true,
-    undef: true,
-    newcap: true,
-    nomen: true,
-    regexp: true,
-    plusplus: true,
-    bitwise: true,
-    devel: true,
-    maxerr: 50,
-    browser: true,
-    indent: 4
-});
-var report = JSLINT.data();
+    /* Loading jshint */
+    var vm = require('vm');
+    var jshintSrc = fs.readFileSync(jshint, 'utf8');
+    vm.runInThisContext(jshintSrc);
+    var JSHINT = global.JSHINT;
+    delete global.JSHINT;    
+
+    var print = console.log;
+} else {
+    var jshint = arguments[0];
+    var filename = arguments[1];
+    var format = arguments[2];
+    var config = eval('(' + arguments[3] + ')');
+    var fileContent = readFile(filename);
+
+    load(jshint);
+}
+
+JSHINT(fileContent, config);
+var report = JSHINT.data();
 
 function escapeSpecialCharacters(str) {
     if (!str || str.constructor !== String) {
@@ -37,7 +48,7 @@ function escapeSpecialCharacters(str) {
 }
 
 /*
- * Output in jslint-xml format
+ * Output in jshint-xml format
  */
 if (format === 'xml') {
     print("<file name=\"" + filename + "\">");

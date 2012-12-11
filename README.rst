@@ -14,9 +14,24 @@ Or by downloading the source and running::
 
     $ python setup.py install
 
-Or, for the latest git version::
+For the latest git version, you need the latest pip installed first::
 
-    $ pip install -e git://github.com/kmmbvnr/django-jenkins.git#egg=django-jenkins
+    $ pip install git+https://github.com/pypa/pip.git
+    $ pip install -e git+git://github.com/kmmbvnr/django-jenkins.git#egg=django-jenkins
+
+
+Installation for Python 3::
+
+    $ pip install git+https://github.com/django/django.git
+    $ pip install hg+http://hg.logilab.org/pylint
+    $ pip install coverage
+    $ # if required
+    $ pip install pyflakes3k
+    $ pip install pep8
+    $ # lettuce and selenium are not yet ported to python 3k
+
+
+And then, upgrade the pip and install django-jenkins from git as described above.
 
 .. _PyPI: http://pypi.python.org/
 
@@ -39,9 +54,9 @@ Settings
 
 - ``PROJECT_APPS``
 
-  if presents, it is supposed to be a list/tuple of django apps for Jenkins to run.
-  Tests, reports and coverage are generated only for the apps from this list.
-  You should specify --all option to ignore this settings.
+  If present, it is supposed to be a list/tuple of django apps for Jenkins to run.
+  Tests, reports, and coverage are generated only for the apps from this list.
+  You should specify --all option to ignore this setting.
 
 - ``JENKINS_TASKS``
 
@@ -69,39 +84,52 @@ Here is the list of tasks prebuild with django-jenkins
 - ``django_jenkins.tasks.run_pylint``
 
   Runs Pylint_ over selected Django apps.
+  
+  Task-specific settings: ``PYLINT_RCFILE``
 
 .. _Pylint: http://www.logilab.org/project/pylint
 
 - ``django_jenkins.tasks.with_coverage``
 
-  Produces XML coverage report for Jenkins
+  Produces `XML coverage report <http://nedbatchelder.com/code/coverage/sample_html/>`__ for Jenkins
+  
+  Task-specific settings: ``COVERAGE_RCFILE``, ``COVERAGE_REPORT_HTML_OUTPUT_DIR``, ``COVERAGE_MEASURE_BRANCH``, ``COVERAGE_EXCLUDES``, ``COVERAGE_WITH_MIGRATIONS``
 
 - ``django_jenkins.tasks.django_tests``
 
   Discovers standard Django test suite from test.py files
 
-- ``django_jenkins.tasks.run_jslint``
+- ``django_jenkins.tasks.dir_tests``
 
-  Runs jslint tools over ``<app>/static/*/*.js`` files.
+  Discover tests from all test*.py files in app subdirectories
+
+- ``django_jenkins.tasks.run_jshint``
+
+  Runs jshint tools over ``<app>/static/*/*.js`` files.
   Creates Pylint compatible report for Jenkins
 
-  You should have the rhino_ javascript interpreter installed for jslint
+  You should have the rhino_ or nodejs_ javascript interpreter installed for jshint
+  
+  Task-specific settings: ``JSHINT_INTERPRETER``, ``JSHINT_CHECKED_FILES``
 
 - ``django_jenkins.tasks.run_csslint``
 
   Runs CSS lint tools over `app/static/*/*.css` files.
   Creates CSS Lint compatible report for Jenkins
 
-  You should have the rhino_ javascript interpreter installed for csslint
+  You should have the rhino_ or nodejs_ javascript interpreter installed for csslint
+  
+  Task-specific settings: ``CSSLINT_INTERPRETER``, ``CSSLINT_CHECKED_FILES``
 
 .. _rhino: http://www.mozilla.org/rhino/
+.. _nodejs: http://nodejs.org/
 
 - ``django_jenkins.tasks.run_pep8``
 
   Runs pep8 tool over selected Django apps.
   Creates Pylint compatible report for Jenkins
 
-  You should have pep8_ python package installed to run this tasks
+  You should have pep8_ python package (>=1.3) installed to run this task.
 
 .. _pep8: http://pypi.python.org/pypi/pep8
 
@@ -110,7 +138,7 @@ Here is the list of tasks prebuild with django-jenkins
   Runs Pyflakes tool over selected Django apps.
   Creates Pylint compatible report for Jenkins.
 
-  You should have Pyflakes_ python package installed to run this tasks
+  You should have Pyflakes_ python package installed to run this task.
 
 .. _Pyflakes: http://pypi.python.org/pypi/pyflakes
 
@@ -119,20 +147,57 @@ Here is the list of tasks prebuild with django-jenkins
   Runs SLOCCount_ tool over selected Django apps.
   Creates sloccount plugin compatible report for Jenkins.
 
-  You should have the SLOCCount program installed to run this task
+  You should have the SLOCCount program installed to run this task.
 
 .. _SLOCCount: http://www.dwheeler.com/sloccount/
+
+- ``django_jenkins.tasks.run_graphmodels``
+
+  Graphs an overview of the models of the selected Django apps.
+  Creates ``models.png`` graphic (`example <https://code.djangoproject.com/wiki/DjangoGraphviz#Examples>`__).
+
+  You should have django-extensions_ and pygraphviz_ installed to run this task.
+  
+  Task-specific settings:
+
+  - ``GRAPH_MODELS``: A dictionary of settings for graph_models, most corresponding to the command-line options (with 'graphmodels\_' removed): ``fail_without_error``, ``disable_fields``, ``group_models``, ``all_applications``, ``outputfile``, ``layout``, ``verbose_names``, ``language``, ``exclude_columns``, ``exclude_models``, ``inheritance``
+
+.. _django-extensions: http://pypi.python.org/pypi/django-extensions
+.. _pygraphviz: http://pypi.python.org/pypi/pygraphviz/
 
 - ``django_jenkins.tasks.lettuce_tests``
 
   Discover Lettuce tests from app/feature directories.
 
-  You should have the Lettuce_ Python package installed to run this task
+  You should have the Lettuce_ Python package installed to run this task.
 
 .. _Lettuce: http://lettuce.it/
 
+- ``django_jenkins.tasks.with_local_celery``
+
+  Replacement for ``djcelery.tests.runners.CeleryTestSuiteRunner``
+  Change settings for run Celery_ tasks locally.
+
+.. _Celery: http://ask.github.com/django-celery/
+
 Changelog
 ---------
+
+0.13.0 2012-07-15
+~~~~~~~~~~~~~~~~~
+* unittest2 compatibility
+* **WARNING:** Junit test data now stored in one junit.xml file
+* Support for pep8 1.3
+* New in-directory test discovery task
+* Added --liveserver option
+* Fixes in jslint and csslint tasks
+
+0.12.1 2012-03-15
+~~~~~~~~~~~~~~~~~
+* Added Celery task
+* Add nodejs support for jslint and csslint tasks
+* Improve js and css files selection
+* Bug fixes
 
 0.12.0 2012-01-15
 ~~~~~~~~~~~~~~~~~
@@ -186,11 +251,26 @@ Authors
 -------
 Mikhail Podgurskiy <kmmbvnr@gmail.com>
 
-Special thanks, for all github forks authors.
+Contributors:
 
-XML Reporting Code from unittest-xml-reporting_ project:
+* Chris Heisel (https://github.com/cmheisel)
+* Andrey Fedoseev (https://github.com/andreyfedoseev)
+* Jannis Leidel (https://github.com/jezdez)
+* Luciano Pacheco (https://github.com/lucmult)
+* Julien Lirochon (https://github.com/jlirochon)
+* Olivier Girardot (https://github.com/ssaboum)
+* Victor Safronovich (https://github.com/suvit)
+* Bradley Ayers (https://github.com/bradleyayers)
+* Jonas Obrist (https://github.com/ojii)
+* John Paulett (https://github.com/johnpaulett)
+* Michael Ellingen (https://github.com/mvantellingen)
+* Domen Kožar (https://github.com/iElectric)
+* Simon Panay (https://github.com/simonpanay)
+* Tom Mortimer-Jones (https://github.com/morty)
+* Philip Kimmey (https://github.com/philipkimmey)
+* Peter Baumgartner (https://github.com/ipmb)
+* Kris Kumler (https://github.com/kkumler)
 
-- Name: Daniel Fernandes Martins <daniel.tritone@gmail.com>
-- Company: Destaquenet Technology Solutions <http://www.destaquenet.com/>
+Special thanks, for all github forks authors not listed here 
+for for project extensions ideas and problem identifications.
 
-.. _unittest-xml-reporting: http://pypi.python.org/pypi/unittest-xml-reporting
