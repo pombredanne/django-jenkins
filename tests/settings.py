@@ -33,25 +33,24 @@ DATABASES = {
 
 JENKINS_TASKS = (
     'django_jenkins.tasks.with_coverage',
-    'django_jenkins.tasks.django_tests',
-    'django_jenkins.tasks.dir_tests',
     'django_jenkins.tasks.run_pep8',
     'django_jenkins.tasks.run_pyflakes',
+    'django_jenkins.tasks.run_flake8',
     'django_jenkins.tasks.run_jshint',
     'django_jenkins.tasks.run_csslint',    
     'django_jenkins.tasks.run_sloccount',    
-    'django_jenkins.tasks.with_local_celery',
+    'django_jenkins.tasks.with_local_celery'
 )
-
-
-# python > 2.4
-if sys.version_info[1] > 4:
-    JENKINS_TASKS += ('django_jenkins.tasks.run_pylint',)
 
 
 # not ported to python 3 libs
 if sys.version_info[0] < 3:
     JENKINS_TASKS += ('django_jenkins.tasks.lettuce_tests',)
+
+
+# bug in python3 version
+if sys.version_info[0] < 3:
+    JENKINS_TASKS += ('django_jenkins.tasks.run_pylint',)
 
 
 JSHINT_CHECKED_FILES = [os.path.join(PROJECT_ROOT, 'static/js/test.js')]
